@@ -13,6 +13,16 @@ android {
         versionCode 1
         versionName '1.0'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+
+        // Endereço da API Laravel. No emulador, 10.0.2.2 é o próprio computador;
+        // o Host faz o Herd encontrar o site academia-api.test.
+        // Para outro endereço, defina apiBaseUrl/apiHost no gradle.properties.
+        buildConfigField 'String', 'API_BASE_URL', "\"${project.findProperty('apiBaseUrl') ?: 'http://10.0.2.2/api/'}\""
+        buildConfigField 'String', 'API_HOST', "\"${project.hasProperty('apiHost') ? project.property('apiHost') : 'academia-api.test'}\""
+    }
+
+    buildFeatures {
+        buildConfig true
     }
 
     buildTypes {
@@ -35,6 +45,8 @@ dependencies {
     implementation libs.androidx.constraintlayout
     implementation libs.androidx.core
     implementation libs.material
+    implementation libs.retrofit
+    implementation libs.retrofit.gson
     testImplementation libs.junit
     androidTestImplementation libs.androidx.espresso.core
     androidTestImplementation libs.androidx.junit

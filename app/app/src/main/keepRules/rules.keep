@@ -10,3 +10,6 @@
 #-keepclassmembers class fqcn.of.javascript.interface.for.webview {
 #   public *;
 #}
+
+# Classes lidas/escritas pelo Gson a partir do JSON da API: os nomes dos campos precisam ser mantidos.
+-keep class com.example.app_academiafr.api.Models$* { *; }
