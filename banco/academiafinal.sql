@@ -1,5 +1,4 @@
--- MySQL 8.0.16+ | Baseado nas telas visíveis do Figma academiafinal.
--- Executar apenas em um banco novo. Não remove nem substitui dados existentes.
+
 CREATE DATABASE academiafinal CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE academiafinal;
 
@@ -7,7 +6,12 @@ CREATE TABLE users (
  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
  name VARCHAR(150) NOT NULL,
  email VARCHAR(255) NOT NULL UNIQUE,
- password VARCHAR(255) NOT NULL COMMENT 'Hash gerado pelo Laravel; nunca senha em texto',
+ -- [WEB] login do painel por usuário (ex.: admin, admin.prime); alunos entram por e-mail.
+ username VARCHAR(60) NULL UNIQUE,
+ -- [WEB] NULL quando o aluno foi cadastrado pelo painel e ainda não ativou o acesso no app.
+ password VARCHAR(255) NULL COMMENT 'Hash gerado pelo Laravel; nunca senha em texto',
+ -- [WEB] administrador geral: gerencia todas as academias. Admin de uma unidade usa gym_user_roles.
+ is_global_admin BOOLEAN NOT NULL DEFAULT FALSE,
  phone VARCHAR(30), avatar_path VARCHAR(500), email_verified_at TIMESTAMP NULL,
  remember_token VARCHAR(100), created_at TIMESTAMP NULL, updated_at TIMESTAMP NULL
 ) ENGINE=InnoDB;
@@ -34,12 +38,22 @@ CREATE TABLE gym_user_roles (
 ) ENGINE=InnoDB;
 
 CREATE TABLE plans (
- id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, gym_id BIGINT UNSIGNED NOT NULL,
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+ -- [WEB] NULL = plano da rede (opção "Todas" no painel), criado pelo administrador geral.
+ gym_id BIGINT UNSIGNED NULL,
  name VARCHAR(150) NOT NULL, description TEXT,
  billing_period ENUM('monthly','annual') NOT NULL,
  price DECIMAL(10,2) NOT NULL, currency CHAR(3) NOT NULL DEFAULT 'BRL',
  active BOOLEAN NOT NULL DEFAULT TRUE, created_at TIMESTAMP NULL, updated_at TIMESTAMP NULL,
  UNIQUE(gym_id,id), FOREIGN KEY(gym_id) REFERENCES gyms(id), CHECK(price>=0)
+) ENGINE=InnoDB;
+
+-- [WEB] Em quais academias cada plano pode ser contratado.
+-- Plano de uma academia: uma linha com a própria academia. Plano da rede: uma linha por academia.
+CREATE TABLE plan_gyms (
+ gym_id BIGINT UNSIGNED NOT NULL, plan_id BIGINT UNSIGNED NOT NULL,
+ PRIMARY KEY(gym_id,plan_id),
+ FOREIGN KEY(gym_id) REFERENCES gyms(id), FOREIGN KEY(plan_id) REFERENCES plans(id)
 ) ENGINE=InnoDB;
 
 CREATE TABLE plan_features (
@@ -55,7 +69,8 @@ CREATE TABLE memberships (
  starts_on DATE NOT NULL, ends_on DATE NOT NULL, contracted_price DECIMAL(10,2) NOT NULL,
  cancelled_at DATETIME NULL, created_at TIMESTAMP NULL, updated_at TIMESTAMP NULL,
  FOREIGN KEY(gym_id,user_id) REFERENCES gym_users(gym_id,user_id),
- FOREIGN KEY(gym_id,plan_id) REFERENCES plans(gym_id,id),
+ -- [WEB] o plano precisa estar disponível na academia (inclui planos da rede).
+ FOREIGN KEY(gym_id,plan_id) REFERENCES plan_gyms(gym_id,plan_id),
  INDEX(gym_id,status,ends_on), CHECK(ends_on>=starts_on), CHECK(contracted_price>=0)
 ) ENGINE=InnoDB;
 
@@ -65,7 +80,8 @@ CREATE TABLE promotions (
  banner_path VARCHAR(500), starts_at DATETIME NOT NULL, ends_at DATETIME NOT NULL,
  promotional_price DECIMAL(10,2) NULL, active BOOLEAN NOT NULL DEFAULT TRUE,
  created_at TIMESTAMP NULL, updated_at TIMESTAMP NULL,
- FOREIGN KEY(gym_id) REFERENCES gyms(id), FOREIGN KEY(gym_id,plan_id) REFERENCES plans(gym_id,id),
+ -- [WEB] referência via plan_gyms para aceitar também planos da rede.
+ FOREIGN KEY(gym_id) REFERENCES gyms(id), FOREIGN KEY(gym_id,plan_id) REFERENCES plan_gyms(gym_id,plan_id),
  CHECK(ends_at>starts_at), CHECK(promotional_price IS NULL OR promotional_price>=0)
 ) ENGINE=InnoDB;
 
@@ -79,11 +95,18 @@ CREATE TABLE workout_plans (
  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, gym_id BIGINT UNSIGNED NOT NULL,
  student_id BIGINT UNSIGNED NOT NULL, instructor_id BIGINT UNSIGNED NULL,
  name VARCHAR(150) NOT NULL, goal VARCHAR(150), version SMALLINT UNSIGNED NOT NULL DEFAULT 1,
+ -- [WEB] rascunho fica só no painel; o app mostra apenas fichas publicadas.
+ status ENUM('draft','published') NOT NULL DEFAULT 'draft',
+ published_at DATETIME NULL,
+ -- [WEB] dias de treino como o painel exibe (ex.: "Segunda, quarta e sexta").
+ schedule_description VARCHAR(200) NULL,
  starts_on DATE, ends_on DATE, archived_at DATETIME NULL,
  created_at TIMESTAMP NULL, updated_at TIMESTAMP NULL,
  FOREIGN KEY(gym_id,student_id) REFERENCES gym_users(gym_id,user_id),
  FOREIGN KEY(gym_id,instructor_id) REFERENCES gym_users(gym_id,user_id),
- INDEX(gym_id,student_id), CHECK(ends_on IS NULL OR starts_on IS NULL OR ends_on>=starts_on)
+ INDEX(gym_id,student_id), INDEX(gym_id,status),
+ CHECK(ends_on IS NULL OR starts_on IS NULL OR ends_on>=starts_on),
+ CHECK(status='draft' OR published_at IS NOT NULL)
 ) ENGINE=InnoDB;
 
 CREATE TABLE workout_days (
@@ -213,9 +236,55 @@ CREATE TABLE password_reset_tokens (
  email VARCHAR(255) PRIMARY KEY, token VARCHAR(255) NOT NULL, created_at TIMESTAMP NULL
 ) ENGINE=InnoDB;
 
--- Sem alunos, senhas ou dados fictícios inseridos.
--- Regras no Laravel: autorização por academia; impedir reserva além da capacidade
--- usando transação e bloqueio da sessão; validar que treino e sessão pertencem ao
--- aluno/academia; não editar fichas já utilizadas (criar nova versão).
--- Gráficos, sequência de dias, ocupação e alunos inativos são calculados a partir
--- do histórico; não são contadores persistidos sujeitos a divergência.
+-- [WEB] Sessão de login do painel (driver "database" do Laravel).
+CREATE TABLE sessions (
+ id VARCHAR(255) PRIMARY KEY, user_id BIGINT UNSIGNED NULL,
+ ip_address VARCHAR(45) NULL, user_agent TEXT NULL,
+ payload LONGTEXT NOT NULL, last_activity INT NOT NULL,
+ INDEX(user_id), INDEX(last_activity)
+) ENGINE=InnoDB;
+
+-- [WEB] Cache do Laravel; usado também para limitar tentativas de login no painel.
+CREATE TABLE cache (
+ `key` VARCHAR(255) PRIMARY KEY, value MEDIUMTEXT NOT NULL, expiration INT NOT NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE cache_locks (
+ `key` VARCHAR(255) PRIMARY KEY, owner VARCHAR(255) NOT NULL, expiration INT NOT NULL
+) ENGINE=InnoDB;
+
+-- [WEB] As duas unidades exibidas no painel. Não são dados fictícios.
+INSERT INTO gyms (name, active, created_at, updated_at) VALUES
+ ('Pryme Academia', TRUE, NOW(), NOW()),
+ ('Move Academia', TRUE, NOW(), NOW());
+
+-- [TESTE] Alunos FICTÍCIOS (2 por academia). Remover este bloco antes de usar em produção.
+-- Senhas em bcrypt no formato do Laravel; a senha em texto está no comentário de cada linha.
+SET @pryme = (SELECT id FROM gyms WHERE name='Pryme Academia' LIMIT 1);
+SET @move  = (SELECT id FROM gyms WHERE name='Move Academia' LIMIT 1);
+
+INSERT INTO users (name, email, password, email_verified_at, created_at, updated_at) VALUES
+ ('Gabriel Souza',  'gabriel.souza@example.com',  '$2y$12$e5py1LITIVDyanTp3hfGeuSGeLD9tPvRei3NzIdyU..LqWNZDmc0K', NOW(), NOW(), NOW()); -- Gabriel@2026!
+SET @gabriel = LAST_INSERT_ID();
+INSERT INTO users (name, email, password, email_verified_at, created_at, updated_at) VALUES
+ ('Larissa Mendes', 'larissa.mendes@example.com', '$2y$12$yQgzy8NlIGbmgN9OJXnXCeU0EvpV6iIw.bWFLvj.9MAJjPO/Mhxqi', NOW(), NOW(), NOW()); -- Larissa@2026!
+SET @larissa = LAST_INSERT_ID();
+INSERT INTO users (name, email, password, email_verified_at, created_at, updated_at) VALUES
+ ('Thiago Rocha',   'thiago.rocha@example.com',   '$2y$12$p7gRHd9JEo/6Khh4jrRfWOEnRl0nvQkGKN1Wak0sk.EuLqKBZ4mqu', NOW(), NOW(), NOW()); -- Thiago@2026!
+SET @thiago = LAST_INSERT_ID();
+INSERT INTO users (name, email, password, email_verified_at, created_at, updated_at) VALUES
+ ('Beatriz Nunes',  'beatriz.nunes@example.com',  '$2y$12$qJvXf2Jbvc1A6gVXsx5QkO2Xmrde4x0Vey6QtH0scrlfszREZUcMC', NOW(), NOW(), NOW()); -- Beatriz@2026!
+SET @beatriz = LAST_INSERT_ID();
+
+INSERT INTO gym_users (gym_id, user_id, status, joined_at) VALUES
+ (@pryme, @gabriel, 'active', CURDATE()),
+ (@pryme, @larissa, 'active', CURDATE()),
+ (@move,  @thiago,  'active', CURDATE()),
+ (@move,  @beatriz, 'active', CURDATE());
+
+INSERT INTO gym_user_roles (gym_id, user_id, role) VALUES
+ (@pryme, @gabriel, 'student'),
+ (@pryme, @larissa, 'student'),
+ (@move,  @thiago,  'student'),
+ (@move,  @beatriz, 'student');
+
