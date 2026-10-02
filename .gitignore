@@ -63,3 +63,9 @@ next-env.d.ts
 /web/.local/
 /web/coverage/
 /web/.env*
+
+# Modelo de configuração da API (sem segredos) deve ir para o git
+!api/.env.example
+
+# Gerados por npm run build:local
+/web/local-build/
