@@ -1,0 +1,29 @@
+name: Organizar banco app web e layout
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/organizar-quatro-pastas.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  organizar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 2
+      - name: Aplicar reorganização validada
+        shell: bash
+        run: |
+          set -euo pipefail
+          git bundle verify .github/workflows/organization.bundle
+          git fetch .github/workflows/organization.bundle HEAD
+          git cherry-pick --no-commit FETCH_HEAD
+          git rm -- .github/workflows/organizar-quatro-pastas.yml .github/workflows/organization.bundle
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'organiza projeto em banco, app, web e layout(figma)'
+          git push origin HEAD:main
