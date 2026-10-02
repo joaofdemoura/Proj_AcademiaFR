@@ -1,5 +1,4 @@
 import { LinkIcon } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { connectorErrorRecovery } from "@/lib/connector-errors.mjs";
 
 /** Render in the affected feature, leaving the rest of the Site usable. */
@@ -20,16 +19,14 @@ export function ConnectorError({
     >
       <p className="break-words">{recovery.message}</p>
       {recovery.action && (
-        <Button
-          asChild
-          variant="outline"
-          className="h-auto min-h-9 max-w-full whitespace-normal text-left"
+        <a
+          href={recovery.action.href}
+          target="_top"
+          className="inline-flex min-h-9 max-w-full items-center gap-2 rounded-md border px-3 py-2 text-left font-medium whitespace-normal hover:bg-black/5"
         >
-          <a href={recovery.action.href} target="_top">
-            <LinkIcon aria-hidden="true" />
-            <span className="min-w-0 break-words">{recovery.action.label}</span>
-          </a>
-        </Button>
+          <LinkIcon aria-hidden="true" className="size-4 shrink-0" />
+          <span className="min-w-0 break-words">{recovery.action.label}</span>
+        </a>
       )}
     </div>
   );
