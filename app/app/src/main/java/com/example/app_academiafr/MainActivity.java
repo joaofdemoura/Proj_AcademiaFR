@@ -3,8 +3,10 @@ package com.example.app_academiafr;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.os.Build;
 import android.os.Bundle;
 import android.text.Editable;
+import android.text.InputType;
 import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.View;
@@ -23,28 +25,50 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
+import com.example.app_academiafr.api.ApiClient;
+import com.example.app_academiafr.api.Models;
+
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
-/** Native screens with local demonstration data. */
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
+
+/**
+ * Telas nativas do app. Login, academias, treino, planos e perfil usam a API
+ * Laravel; aulas, evolução, retenção e anúncios ainda são demonstração local.
+ */
 public class MainActivity extends AppCompatActivity {
     private final int ink = Color.rgb(9, 13, 6);
     private final int panel = Color.rgb(22, 27, 17);
     private final int orange = Color.rgb(237, 112, 29);
     private final int muted = Color.rgb(151, 157, 140);
     private LinearLayout root, body;
-    private String screen = "welcome", academy = "ACADEMIA MOVE", userName = "Marina";
-    private String category = "Todas", goal = "Hipertrofia", metric = "Peso", chosenPlan = "TOTAL";
+    private String screen = "welcome", academy = "", userName = "";
+    private String category = "Todas", metric = "Peso";
     private String adTitle = "BLACK WEEK FITNESS", audience = "Inativos 30d", campaignTab = "CAMPANHAS";
-    private int day = 15, discount = 40;
-    private boolean annual, loud = true, training, allAcademies;
+    private int day = 15, discount = 40, selectedWorkout;
+    private long gymId, chosenPlanId;
+    private boolean loud = true, training, signingIn;
     private final Set<String> reservations = new HashSet<>(Arrays.asList("15:3"));
     private final Set<Integer> completed = new HashSet<>();
     private final ArrayList<String> history = new ArrayList<>();
+
+    // Dados vindos da API (null = ainda não carregado).
+    private Models.User user;
+    private List<Models.WorkoutPlan> workoutPlans;
+    private List<Models.Membership> memberships;
+    private List<Models.Plan> gymPlans;
+    private final Set<String> loading = new HashSet<>();
+    private final Map<String, String> loadErrors = new HashMap<>();
 
     private int dp(int n) { return (int) (n * getResources().getDisplayMetrics().density); }
 
@@ -52,8 +76,9 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         if (savedInstanceState != null) {
             screen = savedInstanceState.getString("screen", "welcome");
-            userName = savedInstanceState.getString("name", "Marina");
-            academy = savedInstanceState.getString("academy", "ACADEMIA MOVE");
+            userName = savedInstanceState.getString("name", "");
+            academy = savedInstanceState.getString("academy", "");
+            gymId = savedInstanceState.getLong("gymId", 0);
             reservations.clear();
             ArrayList<String> savedReservations = savedInstanceState.getStringArrayList("reservations");
             if (savedReservations != null) reservations.addAll(savedReservations);
@@ -64,11 +89,14 @@ public class MainActivity extends AppCompatActivity {
             day = savedInstanceState.getInt("day", 15);
             adTitle = savedInstanceState.getString("adTitle", adTitle);
             discount = savedInstanceState.getInt("discount", 40);
+            if (ApiClient.getToken() == null && !screen.equals("welcome") && !screen.equals("login")) screen = "welcome";
         } else {
             adTitle = getPreferences(MODE_PRIVATE).getString("adTitle", adTitle);
             discount = getPreferences(MODE_PRIVATE).getInt("discount", 40);
-            if (getPreferences(MODE_PRIVATE).getBoolean("remember", false)) {
-                userName = getPreferences(MODE_PRIVATE).getString("name", "Marina");
+            String savedToken = getPreferences(MODE_PRIVATE).getString("token", null);
+            if (getPreferences(MODE_PRIVATE).getBoolean("remember", false) && savedToken != null) {
+                ApiClient.setToken(savedToken);
+                userName = getPreferences(MODE_PRIVATE).getString("name", "");
                 screen = "academies";
             }
         }
@@ -84,7 +112,7 @@ public class MainActivity extends AppCompatActivity {
 
     @Override public void onSaveInstanceState(Bundle out) {
         super.onSaveInstanceState(out);
-        out.putString("screen", screen); out.putString("name", userName); out.putString("academy", academy);
+        out.putString("screen", screen); out.putString("name", userName); out.putString("academy", academy); out.putLong("gymId", gymId);
         out.putStringArrayList("reservations", new ArrayList<>(reservations));
         out.putIntArray("completed", completed.stream().mapToInt(Integer::intValue).toArray());
         out.putStringArrayList("history", history); out.putInt("day", day);
@@ -149,6 +177,57 @@ public class MainActivity extends AppCompatActivity {
         v.setInputType(password ? 129 : 1); add(body, v, 52, 18); return v;
     }
     private EditText field(String hint) { return field(hint, "", false); }
+
+    // ------------------------------------------------------------ API
+
+    /**
+     * Garante que um dado da API está carregado. Se ainda não está, mostra
+     * "Carregando…" (ou o erro com botão de tentar de novo), dispara a chamada
+     * e redesenha a tela quando a resposta chega. Retorna true se já há dados.
+     */
+    private <T> boolean ensure(String key, T current, Supplier<Call<T>> call, Consumer<T> store, boolean showStatus) {
+        if (current != null) return true;
+        String error = loadErrors.get(key);
+        if (error != null) {
+            if (showStatus) {
+                LinearLayout c = card(); add(c, text(error, 14, muted), 16);
+                add(c, button("TENTAR DE NOVO", () -> { loadErrors.remove(key); show(screen); })); add(body, c, 16);
+            }
+            return false;
+        }
+        if (showStatus) add(body, text("Carregando…", 14, muted), 16);
+        if (loading.add(key)) {
+            call.get().enqueue(new Callback<T>() {
+                @Override public void onResponse(Call<T> c, Response<T> r) {
+                    loading.remove(key);
+                    if (r.code() == 401) { sessionExpired(); return; }
+                    if (r.isSuccessful() && r.body() != null) store.accept(r.body());
+                    else loadErrors.put(key, ApiClient.errorMessage(r, "Não foi possível carregar. Tente novamente."));
+                    if (!isFinishing()) show(screen);
+                }
+                @Override public void onFailure(Call<T> c, Throwable t) {
+                    loading.remove(key); loadErrors.put(key, ApiClient.OFFLINE);
+                    if (!isFinishing()) show(screen);
+                }
+            });
+        }
+        return false;
+    }
+
+    private void clearSession() {
+        ApiClient.setToken(null);
+        getPreferences(MODE_PRIVATE).edit().putBoolean("remember", false).remove("token").apply();
+        user = null; workoutPlans = null; memberships = null; gymPlans = null; gymId = 0; academy = "";
+        loadErrors.clear(); completed.clear(); history.clear();
+    }
+
+    private void sessionExpired() {
+        if (ApiClient.getToken() == null) return;
+        clearSession(); notice("Sua sessão expirou. Entre novamente."); show("login");
+    }
+
+    // ------------------------------------------------------------ telas
+
     private void show(String destination) {
         screen = destination; root = column(); root.setBackgroundColor(ink);
         ViewCompat.setOnApplyWindowInsetsListener(root, (v, insets) -> {
@@ -181,40 +260,88 @@ public class MainActivity extends AppCompatActivity {
         label("ACADEMIA  /  FITNESS & MOVIMENTO"); space(90);
         add(body, bold("TREINE", 58)); add(body, text("ONDE", 58, orange, true)); add(body, text("QUISER.", 58, orange, true));
         space(26); add(body, text("Uma plataforma para todas as suas metas. Treinos, aulas e evolução em um só lugar.", 14, muted), 36);
-        add(body, button("ENTRAR", () -> go("login")), 12); add(body, button("VER ACADEMIAS", false, () -> go("academies")));
+        add(body, button("ENTRAR", () -> go(ApiClient.getToken() == null ? "login" : "academies")), 12);
+        add(body, button("VER ACADEMIAS", false, () -> go(ApiClient.getToken() == null ? "login" : "academies")));
     }
     private void login() {
         label("BEM-VINDO DE VOLTA"); space(30); title("Bem-vindo\nde volta.");
         add(body, text("Entre para acompanhar seus treinos,\naulas e evolução.", 14, muted), 32);
-        label("Nome do usuário"); EditText user = field("Digite seu nome");
+        label("E-mail"); EditText email = field("Digite seu e-mail");
+        email.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
         label("Senha"); EditText pass = field("Digite sua senha", "", true);
         CheckBox check = new CheckBox(this); check.setText("Manter conectado"); check.setTextColor(muted); check.setTextSize(12); add(body, check, 24);
-        add(body, button("Entrar", () -> {
-            if (user.getText().toString().trim().isEmpty()) user.setError("Digite seu nome");
-            else if (pass.getText().toString().trim().isEmpty()) pass.setError("Digite sua senha");
-            else { userName = user.getText().toString().trim();
-                getPreferences(MODE_PRIVATE).edit().putBoolean("remember", check.isChecked()).putString("name", userName).apply(); go("academies"); }
-        }), 24);
-        add(body, text("Use o cadastro da sua academia para acessar.", 12, muted)); space(16);
-        add(body, text("Prévia local: preencha nome e senha para explorar as telas.", 11, muted));
+        TextView enter = button(signingIn ? "Entrando…" : "Entrar", () -> {});
+        enter.setOnClickListener(v -> {
+            String login = email.getText().toString().trim(), password = pass.getText().toString();
+            if (login.isEmpty()) { email.setError("Digite seu e-mail"); return; }
+            if (password.isEmpty()) { pass.setError("Digite sua senha"); return; }
+            if (signingIn) return;
+            signingIn = true; enter.setText("Entrando…");
+            ApiClient.get().login(new Models.LoginRequest(login, password, "android " + Build.MODEL)).enqueue(new Callback<Models.LoginResponse>() {
+                @Override public void onResponse(Call<Models.LoginResponse> c, Response<Models.LoginResponse> r) {
+                    signingIn = false; enter.setText("Entrar");
+                    if (!r.isSuccessful() || r.body() == null || r.body().token == null) {
+                        String message = r.code() == 429 ? "Muitas tentativas. Aguarde um minuto e tente novamente."
+                                : r.code() == 422 || r.code() == 401 ? ApiClient.errorMessage(r, "E-mail ou senha incorretos.")
+                                : ApiClient.errorMessage(r, "Não foi possível entrar. Tente novamente.");
+                        pass.setError(message); notice(message); return;
+                    }
+                    ApiClient.setToken(r.body().token);
+                    user = r.body().user; userName = user.firstName();
+                    workoutPlans = null; memberships = null; gymPlans = null; loadErrors.clear(); completed.clear();
+                    if (check.isChecked()) getPreferences(MODE_PRIVATE).edit().putBoolean("remember", true).putString("token", r.body().token).putString("name", userName).apply();
+                    else getPreferences(MODE_PRIVATE).edit().putBoolean("remember", false).remove("token").apply();
+                    go("academies");
+                }
+                @Override public void onFailure(Call<Models.LoginResponse> c, Throwable t) {
+                    signingIn = false; enter.setText("Entrar"); notice(ApiClient.OFFLINE);
+                }
+            });
+        });
+        add(body, enter, 24);
+        add(body, text("Use o e-mail e a senha cadastrados na sua academia.", 12, muted));
     }
     private void academies() {
         header("ESCOLHA SUA ACADEMIA", "ONDE VAMOS TREINAR");
-        String[] choices = {"PRYME ACADEMIA", "MOVE ACADEMIA"};
-        for (int i = 0; i < choices.length; i++) {
-            String item = choices[i]; LinearLayout c = card();
-            TextView logo = text(i == 0 ? "PRYME▰" : "↔ MOVE", 36, i == 0 ? Color.WHITE : orange, true);
-            logo.setGravity(Gravity.CENTER); logo.setBackground(bg(ink, 2, false)); add(c, logo, 130, 16);
-            add(c, text("ACADEMIA", 10, orange)); add(c, bold(item, 26), 8);
-            add(c, text(i == 0 ? "3 unidades   •   Capivari, SC" : "1 unidade   •   Tubarão, SC", 12, muted), 20);
-            add(c, button("ACESSAR", () -> { academy = item; go("home"); })); add(body, c, 18);
+        if (!ensure("me", user, () -> ApiClient.get().me(), u -> { user = u; userName = u.firstName(); }, true)) return;
+        List<Models.Gym> gyms = new ArrayList<>();
+        for (Models.Gym g : user.gyms) if (!"inactive".equals(g.status)) gyms.add(g);
+        if (gyms.isEmpty()) {
+            LinearLayout c = card(); add(c, bold("Nenhuma academia ativa", 20), 8);
+            add(c, text("Sua conta ainda não está ligada a uma academia. Fale com a recepção.", 13, muted)); add(body, c, 16);
+            add(body, button("SAIR", false, this::signOut));
+            return;
         }
+        for (Models.Gym g : gyms) {
+            boolean pryme = g.name.toUpperCase().contains("PRYME");
+            LinearLayout c = card();
+            TextView logo = text(pryme ? "PRYME▰" : "↔ " + g.name.toUpperCase().replace("ACADEMIA", "").trim(), 36, pryme ? Color.WHITE : orange, true);
+            logo.setGravity(Gravity.CENTER); logo.setBackground(bg(ink, 2, false)); add(c, logo, 130, 16);
+            add(c, text("ACADEMIA", 10, orange)); add(c, bold(g.name.toUpperCase(), 26), 8);
+            add(c, text(g.roles.contains("student") ? "Você é aluno desta academia" : "Seu acesso nesta academia", 12, muted), 20);
+            add(c, button("ACESSAR", () -> {
+                if (gymId != g.id) { gymPlans = null; loadErrors.remove("plans"); }
+                academy = g.name.toUpperCase(); gymId = g.id; go("home");
+            }));
+            add(body, c, 18);
+        }
+    }
+    private Models.WorkoutPlan currentWorkout() {
+        if (workoutPlans == null || workoutPlans.isEmpty()) return null;
+        return workoutPlans.get(Math.min(selectedWorkout, workoutPlans.size() - 1));
     }
     private void home(boolean manager) {
         LinearLayout r = row(); r.addView(bold(academy + " ⌄", 18), new LinearLayout.LayoutParams(0, -2, 1f));
-        r.addView(button(userName.substring(0, Math.min(2, userName.length())).toUpperCase(), () -> go("profile")), new LinearLayout.LayoutParams(dp(48), dp(48)));
+        r.getChildAt(0).setOnClickListener(v -> go("academies"));
+        r.addView(button(initials(), () -> go("profile")), new LinearLayout.LayoutParams(dp(48), dp(48)));
         add(body, r, 24); add(body, bold("BOM DIA,", 30)); add(body, text(userName.toUpperCase(), 30, orange, true));
-        add(body, text("Hoje é dia de treino de pernas · 50 min", 13, muted), 24);
+        ensure("workouts", workoutPlans, () -> ApiClient.get().workouts(), w -> workoutPlans = w, false);
+        Models.WorkoutPlan plan = currentWorkout();
+        String today = loadErrors.containsKey("workouts") ? "Não foi possível carregar sua ficha."
+                : workoutPlans == null ? "Carregando sua ficha…"
+                : plan == null ? "Nenhuma ficha publicada ainda."
+                : "Sua ficha: " + plan.name + (plan.scheduleDescription != null ? " · " + plan.scheduleDescription : "");
+        add(body, text(today, 13, muted), 24);
         LinearLayout streak = card(orange, false); add(streak, text("SEQUÊNCIA ATUAL", 10, ink, true)); add(streak, text("14 DIAS", 44, ink, true), 8);
         add(streak, text("▮ ▮ ▮ ▮ ▮ ▮ ▮ ▮ ▮ ▮ ▮ ▮ ▯ ▯", 20, ink)); add(streak, text("SEG     TER     QUA     QUI     SEX     SÁB     DOM", 9, ink)); add(body, streak, 20);
         LinearLayout shortcuts = row(); String[][] links = {{"TREINO","workout"},{"AULAS","classes"},{"EVOLUÇÃO","progress"},{"PLANOS","plans"}};
@@ -226,6 +353,10 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout offer = card(panel, true); add(offer, text("−40% OFF", 10, orange), 8); add(offer, bold("PLANO ANUAL\nBLACK WEEK", 30), 8);
         add(offer, text("Dê o próximo passo na sua evolução.", 13, muted), 16); add(offer, button("GARANTIR", () -> go("plans"))); add(body, offer, 24);
         if (manager) { add(body, button("RETENÇÃO DE ALUNOS", false, () -> go("retention")), 12); add(body, button("CRIAR ANÚNCIO", () -> go("ad"))); }
+    }
+    private String initials() {
+        String n = userName.trim();
+        return n.isEmpty() ? "EU" : n.substring(0, Math.min(2, n.length())).toUpperCase();
     }
     private void classes() {
         header("SEMANA · MAIO", "AGENDAR AULAS", "⌕", () -> notice("Escolha uma modalidade nos filtros"));
@@ -251,20 +382,37 @@ public class MainActivity extends AppCompatActivity {
         }
     }
     private void workout() {
-        header("TERÇA · PERNAS", "SEU TREINO");
-        chips(Arrays.asList("Hipertrofia","Emagrecer","Resistência","Mobilidade"),goal,value->{goal=value;show("workout");});
-        LinearLayout c=card(); add(c,text("TREINO DE HOJE",10,orange),8); add(c,bold("PERNAS ·\n"+goal.toUpperCase(),30),12);
-        add(c,bold("50 MIN   420 KCAL   "+completed.size()+"/5",20),16);
+        Models.WorkoutPlan current = currentWorkout();
+        header(current != null && current.scheduleDescription != null ? current.scheduleDescription.toUpperCase() : "SUA FICHA", "SEU TREINO");
+        if (!ensure("workouts", workoutPlans, () -> ApiClient.get().workouts(), w -> workoutPlans = w, true)) return;
+        if (workoutPlans.isEmpty()) {
+            LinearLayout c = card(); add(c, bold("Nenhuma ficha publicada", 20), 8);
+            add(c, text("Quando seu professor publicar uma ficha no painel, ela aparece aqui.", 13, muted), 16);
+            add(c, button("ATUALIZAR", false, () -> { workoutPlans = null; show("workout"); })); add(body, c);
+            return;
+        }
+        Models.WorkoutPlan plan = currentWorkout();
+        if (workoutPlans.size() > 1) {
+            List<String> names = new ArrayList<>(); for (Models.WorkoutPlan p : workoutPlans) names.add(p.name);
+            chips(names, plan.name, value -> { selectedWorkout = names.indexOf(value); completed.clear(); show("workout"); });
+        }
+        List<Models.WorkoutExercise> exercises = plan.allExercises();
+        LinearLayout c=card(); add(c,text("TREINO DE HOJE",10,orange),8);
+        add(c,bold(plan.name.toUpperCase()+(plan.goal!=null?" ·\n"+plan.goal.toUpperCase():""),30),12);
+        add(c,bold(exercises.size()+" EXERCÍCIOS   "+completed.size()+"/"+exercises.size(),20),16);
         add(c,button(training?"CONTINUAR TREINO":"INICIAR TREINO",()->{training=true;notice("Treino iniciado. Toque nos exercícios para marcar as séries.");show("workout");}));
         add(body,c,24); title("EXERCÍCIOS");
-        String[] exercises={"Agachamento livre","Leg press 45°","Cadeira extensora","Stiff com barra","Panturrilha em pé"};
-        int[] weights={60,120,38,40,30};
-        for(int i=0;i<exercises.length;i++) {
-            final int index=i; String item=exercises[i]; LinearLayout ex=card();
+        for(int i=0;i<exercises.size();i++) {
+            final int index=i; Models.WorkoutExercise e=exercises.get(i);
+            String item=e.exercise!=null?e.exercise.name:"Exercício "+(i+1);
+            int rest=e.restSeconds!=null?e.restSeconds:0;
+            String weight=e.targetWeightKg!=null?"   •   "+e.targetWeightKg.replaceAll("\\.?0+$","")+" kg":"";
+            LinearLayout ex=card();
             add(ex,bold((completed.contains(i)?"✓":String.valueOf(i+1))+"   "+item+"   ›",18),6);
-            add(ex,text("3 × 12   •   "+weights[i]+" kg   •   60s",12,muted));
-            ex.setOnClickListener(v->new AlertDialog.Builder(this).setTitle(item)
-                .setMessage("3 séries de 12 repetições. Descanse 60 segundos entre as séries.")
+            add(ex,text(e.sets+" × "+e.reps()+weight+"   •   "+rest+"s",12,muted));
+            String message=e.sets+" séries de "+e.reps()+" repetições. Descanse "+rest+" segundos entre as séries."
+                    +(e.notes!=null&&!e.notes.isEmpty()?"\n\n"+e.notes:"");
+            ex.setOnClickListener(v->new AlertDialog.Builder(this).setTitle(item).setMessage(message)
                 .setPositiveButton(completed.contains(index)?"Desmarcar":"Concluir exercício",(dialog,which)->{
                     if(!completed.add(index)) completed.remove(index); show("workout");
                 }).setNegativeButton("Voltar",null).show()); add(body,ex,10);
@@ -291,22 +439,31 @@ public class MainActivity extends AppCompatActivity {
         add(chart,bars,180,16); add(chart,text("Acompanhamento das últimas 7 avaliações",11,muted)); add(body,chart);
     }
     private void plans() {
-        header("ESCOLHA E ASSINE","PLANOS"); label("ACADEMIA");
-        chips(Arrays.asList("Atual","Todas"),allAcademies?"Todas":"Atual",value->{allAcademies=value.equals("Todas");show("plans");});
-        chips(Arrays.asList("MENSAL","ANUAL"),annual?"ANUAL":"MENSAL",value->{annual=value.equals("ANUAL");show("plans");});
-        String[] choices={"ESSENCIAL","TOTAL"};
-        for(int i=0;i<choices.length;i++) {
-            String item=choices[i]; LinearLayout c=card(panel,item.equals(chosenPlan));
-            if(i==1) add(c,text("MAIS VENDIDO",11,orange,true),10);
-            add(c,text(i==0&&!allAcademies?academy:"TODAS AS UNIDADES",10,muted));
-            add(c,bold(item+(item.equals(chosenPlan)?"   ◉":"   ○"),28),10);
-            int price=i==0?(annual?79:89):(annual?129:149);
-            add(c,bold("R$ "+price+" /mês",32),16);
-            add(c,text("✓ Musculação livre\n✓ "+(i==0?"2 aulas/semana":"Aulas ilimitadas")+"\n✓ App + treinos\n✓ Avaliação trimestral"+(i==1?"\n✓ Acesso a todas as academias":""),14,muted));
-            c.setOnClickListener(v->{chosenPlan=item;show("plans");}); add(body,c,16);
+        header("ESCOLHA E ASSINE","PLANOS");
+        if (gymId == 0) {
+            add(body, text("Escolha uma academia para ver os planos.", 14, muted), 16);
+            add(body, button("ESCOLHER ACADEMIA", () -> go("academies"))); return;
         }
-        add(body,button("ESCOLHER "+chosenPlan,()->new AlertDialog.Builder(this).setTitle("Plano "+chosenPlan)
-            .setMessage("Plano selecionado nesta prévia. A contratação depende da integração com o serviço da academia.")
+        label(academy);
+        if (!ensure("plans", gymPlans, () -> ApiClient.get().plans(gymId), p -> gymPlans = p, true)) return;
+        if (gymPlans.isEmpty()) { add(body, text("Nenhum plano disponível nesta academia no momento.", 14, muted)); return; }
+        Models.Plan chosen = null;
+        for (Models.Plan p : gymPlans) if (p.id == chosenPlanId) chosen = p;
+        if (chosen == null) { chosen = gymPlans.get(0); chosenPlanId = chosen.id; }
+        for (Models.Plan p : gymPlans) {
+            boolean selected = p.id == chosenPlanId;
+            LinearLayout c=card(panel,selected);
+            add(c,text("annual".equals(p.billingPeriod)?"PLANO ANUAL":"PLANO MENSAL",10,muted));
+            add(c,bold(p.name.toUpperCase()+(selected?"   ◉":"   ○"),28),10);
+            add(c,bold(ApiClient.money(p.price)+("annual".equals(p.billingPeriod)?" /ano":" /mês"),32),16);
+            StringBuilder features = new StringBuilder();
+            for (Models.PlanFeature f : p.features) features.append(features.length() > 0 ? "\n" : "").append("✓ ").append(f.description);
+            if (features.length() > 0) add(c,text(features.toString(),14,muted));
+            c.setOnClickListener(v->{chosenPlanId=p.id;show("plans");}); add(body,c,16);
+        }
+        String chosenName = chosen.name.toUpperCase();
+        add(body,button("ESCOLHER "+chosenName,()->new AlertDialog.Builder(this).setTitle("Plano "+chosenName)
+            .setMessage("Para contratar ou trocar de plano, fale com a recepção da academia.")
             .setPositiveButton("Entendi",null).show()));
     }
     private void retention() {
@@ -353,14 +510,54 @@ public class MainActivity extends AppCompatActivity {
         }));
     }
     private void saveDraft() {getPreferences(MODE_PRIVATE).edit().putString("adTitle",adTitle).putInt("discount",discount).apply();}
+    private boolean isManager() {
+        if (user == null) return false;
+        if (user.isGlobalAdmin) return true;
+        for (Models.Gym g : user.gyms) if (g.roles.contains("admin")) return true;
+        return false;
+    }
+    private static String membershipStatus(String status) {
+        if (status == null) return "";
+        switch (status) {
+            case "active": return "Ativo"; case "pending": return "Pendente";
+            case "expired": return "Vencido"; case "cancelled": return "Cancelado"; default: return status;
+        }
+    }
     private void profile() {
         header("SUA CONTA","PERFIL"); LinearLayout c=card();
-        add(c,text(userName.substring(0,Math.min(2,userName.length())).toUpperCase(),42,orange,true),12);
-        add(c,bold(userName,26)); add(c,text(academy,12,muted)); add(body,c,24);
+        add(c,text(initials(),42,orange,true),12);
+        add(c,bold(user!=null?user.name:userName,26));
+        if (user!=null && user.email!=null) add(c,text(user.email,12,muted));
+        add(c,text(academy,12,muted)); add(body,c,16);
+        if (ensure("memberships", memberships, () -> ApiClient.get().memberships(), m -> memberships = m, true)) {
+            Models.Membership current = null;
+            for (Models.Membership m : memberships) if (m.gym != null && m.gym.id == gymId) { current = m; break; }
+            if (current == null && !memberships.isEmpty()) current = memberships.get(0);
+            LinearLayout plan=card(); add(plan,text("MEU PLANO",10,orange),8);
+            if (current == null || current.plan == null) add(plan,text("Você ainda não tem um plano ativo.",14,muted));
+            else {
+                add(plan,bold(current.plan.name.toUpperCase(),24),6);
+                add(plan,text(membershipStatus(current.status)+"   •   vence em "+ApiClient.date(current.endsOn),13,muted));
+            }
+            add(body,plan,24);
+        }
         add(body,button("MEUS PLANOS",false,()->go("plans")),12);
         add(body,button("TROCAR ACADEMIA",false,()->go("academies")),12);
-        add(body,button("PAINEL DO GESTOR",false,()->go("manager")),12);
-        add(body,button("RETENÇÃO DE ALUNOS",false,()->go("retention")),24);
-        add(body,button("SAIR",()->{getPreferences(MODE_PRIVATE).edit().putBoolean("remember",false).apply();history.clear();show("welcome");}));
+        if (isManager()) {
+            add(body,button("PAINEL DO GESTOR",false,()->go("manager")),12);
+            add(body,button("RETENÇÃO DE ALUNOS",false,()->go("retention")),12);
+        }
+        space(12);
+        add(body,button("SAIR",this::signOut));
+    }
+    private void signOut() {
+        String token = ApiClient.getToken();
+        if (token != null) {
+            ApiClient.get().logout("Bearer " + token).enqueue(new Callback<Void>() {
+                @Override public void onResponse(Call<Void> c, Response<Void> r) {}
+                @Override public void onFailure(Call<Void> c, Throwable t) {}
+            });
+        }
+        clearSession(); show("welcome");
     }
 }
