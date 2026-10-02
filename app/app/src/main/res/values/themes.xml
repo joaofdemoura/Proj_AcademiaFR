@@ -1,0 +1,12 @@
+<resources>
+    <style name="Base.Theme.App_AcademiaFR" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="colorPrimary">#ED701D</item>
+        <item name="colorOnPrimary">#090D06</item>
+        <item name="android:windowBackground">#090D06</item>
+        <item name="android:statusBarColor">#090D06</item>
+        <item name="android:navigationBarColor">#090D06</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:fontFamily">sans</item>
+    </style>
+    <style name="Theme.App_AcademiaFR" parent="Base.Theme.App_AcademiaFR" />
+</resources>

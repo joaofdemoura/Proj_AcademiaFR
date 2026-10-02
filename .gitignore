@@ -47,3 +47,19 @@ next-env.d.ts
 
 /.local/
 *.tsbuildinfo
+
+# Android e web em subpastas
+/app/.gradle/
+/app/.kotlin/
+/app/.idea/
+/app/local.properties
+/app/**/build/
+/web/node_modules/
+/web/.next/
+/web/.vinext/
+/web/dist/
+/web/.wrangler/
+/web/.sites-runtime/
+/web/.local/
+/web/coverage/
+/web/.env*

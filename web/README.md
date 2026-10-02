@@ -41,17 +41,17 @@ Publicar um treino salva o status no banco do painel. A versão atual ainda não
 | Node.js | 22.13 ou superior (a prévia local foi validada no Node.js 24). |
 | Gerenciador | npm. |
 | Banco local | `node:sqlite`, gravado em `.local/gym.sqlite`. |
-| Migrações | Arquivos em `drizzle/`; aplique cada migração pendente uma única vez. |
+| Migrações | Arquivos em `../banco/drizzle/`; aplique cada migração pendente uma única vez. |
 
 ```sh
 npm ci
 npm run db:generate
 npm run build
-node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0000_migration.sql
+node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file ../banco/drizzle/0000_migration.sql
 npm run dev
 ```
 
-Substitua `0000_migration.sql` pelo nome real da primeira migração em `drizzle/`.
+Substitua `0000_migration.sql` pelo nome real da primeira migração em `../banco/drizzle/`.
 
 ## Arquivos principais
 
@@ -99,3 +99,11 @@ As credenciais locais não integram o pacote de código. A autenticação hosped
 
 As restrições são verificadas no servidor, inclusive em consultas e alterações por identificador. Administradores de unidade não podem transferir alunos nem associar treinos a alunos externos. Planos compartilhados da rede são somente leitura para essas contas; cada unidade pode criar seus próprios planos. Em uma instalação nova, o servidor gera as três contas e informa as senhas iniciais no terminal.
 
+## Organização do repositório
+
+- `banco/`: SQL MySQL e migrações SQLite/D1.
+- `app/`: projeto Android extraído e ZIP original. Abra essa pasta no Android Studio.
+- `web/`: aplicação web, recursos públicos, scripts e versão local compilada.
+- `layout(figma)/`: os 12 PDFs exportados do Figma.
+
+Execute os comandos web dentro desta pasta. O módulo Android está em `../app/app`, e os PDFs ficam em `../layout(figma)`.
