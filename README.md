@@ -1,6 +1,13 @@
 # Pryme & Move — painel administrativo
 
 Aplicação web para administrar as academias Pryme e Move, inspirada nas telas mobile fornecidas: fundo escuro, detalhes em laranja, tipografia Montserrat e cartões com contornos discretos.
+## Credenciais de acesso local
+
+| Academia / escopo | Login | Senha |
+| --- | --- | --- |
+| Acesso geral | `admin` | `Admin@2026!` |
+| Pryme Academia | `admin.prime` | `Pryme@2026!` |
+| Move Academia | `admin.move` | `Move@2026!` |
 
 ## Visão geral
 
@@ -91,3 +98,4 @@ As credenciais locais não integram o pacote de código. A autenticação hosped
 | `admin.move` | Somente alunos e treinos da Move Academia. |
 
 As restrições são verificadas no servidor, inclusive em consultas e alterações por identificador. Administradores de unidade não podem transferir alunos nem associar treinos a alunos externos. Planos compartilhados da rede são somente leitura para essas contas; cada unidade pode criar seus próprios planos. Em uma instalação nova, o servidor gera as três contas e informa as senhas iniciais no terminal.
+
