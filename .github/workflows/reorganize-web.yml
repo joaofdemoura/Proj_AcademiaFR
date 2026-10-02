@@ -17,19 +17,13 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Mover a aplicação para web
+      - name: Finalizar reorganização
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p web
-          while IFS= read -r item; do
-            case "$item" in
-              .gitignore|banco|.github|web) ;;
-              *) git mv "$item" web/ ;;
-            esac
-          done < <(git ls-tree --name-only HEAD)
+          git rm .github/workflows/reorganize-web.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -m "organiza aplicação web na pasta web"
+          git commit -m "remove workflow temporário de reorganização"
           git push origin HEAD:main
