@@ -6,16 +6,16 @@ Backend único do projeto: o **app Android** e o **painel web** (`../web`) usam 
 
 1. Instale as dependências: `composer install`
 2. Copie `.env.example` para `.env` e rode `php artisan key:generate`.
-3. No `.env`, preencha a conexão MySQL (`DB_*`) e as senhas dos administradores (`ADMIN_*_PASSWORD`).
+3. No `.env`, preencha a conexão MySQL (`DB_*`) e as senhas dos administradores e personais (`ADMIN_*_PASSWORD` e `PERSONAL_*_PASSWORD`).
 4. Crie o banco com `../banco/academiafinal.sql`.
 5. Registre o site no Herd: `herd link academia-api` → `http://academia-api.test`
-6. Crie os administradores do painel: `php artisan db:seed --class=AdminSeeder`
+6. Crie os administradores do painel: `php artisan db:seed --class=AdminSeeder`. Crie os personais: `php artisan db:seed --class=PersonalSeeder` (preserva contas existentes).
 
 > **Não rode `php artisan migrate`.** A estrutura do banco é definida em `../banco/academiafinal.sql`; alterações de tabela vão nos arquivos `.sql` dessa pasta.
 
 ## Autenticação
 
-`POST /api/login` com `{login, password, device_name}` (login = e-mail do aluno ou usuário do admin) devolve um token.
+`POST /api/login` com `{login, password, device_name}` (login = e-mail do aluno ou usuário do administrador/personal) devolve um token.
 Envie-o nas demais chamadas: `Authorization: Bearer <token>`.
 
 ## Rotas
@@ -31,4 +31,4 @@ Envie-o nas demais chamadas: `Authorization: Bearer <token>`.
 | GET | `/api/admin/data` | painel: alunos, planos e fichas |
 | POST | `/api/admin/records` | painel: salva aluno, plano ou ficha (`{kind, record}`) |
 
-Admin geral (`users.is_global_admin`) vê todas as academias; admin de unidade (`gym_user_roles.role = 'admin'`) só a própria.
+Admin geral (`users.is_global_admin`) vê todas as academias; admin de unidade (`gym_user_roles.role = 'admin'`) só a própria. Personal (`instructor`) consulta alunos e cria/edita treinos somente da unidade em que possui vínculo ativo. Personal não altera alunos ou planos e não recebe a lista de planos. Os dados de um treino incluem `unit`, validado junto ao aluno e ao registro existente. Consulte a tabela completa de contas no [README principal](../README.md).
