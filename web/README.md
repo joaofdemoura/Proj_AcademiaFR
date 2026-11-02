@@ -1,109 +1,37 @@
-# Pryme & Move — painel administrativo
+# Painel Pryme & Move
 
-Aplicação web para administrar as academias Pryme e Move, inspirada nas telas mobile fornecidas: fundo escuro, detalhes em laranja, tipografia Montserrat e cartões com contornos discretos.
-## Credenciais de acesso local
+Painel web conectado à API Laravel em `../api`. O administrador geral alterna entre as academias; administradores de unidade e personais ficam restritos à própria academia. Personais consultam alunos e montam/publicam treinos, sem cadastrar alunos ou alterar planos.
 
-| Academia / escopo | Login | Senha |
-| --- | --- | --- |
-| Acesso geral | `admin` | `Admin@2026!` |
-| Pryme Academia | `admin.prime` | `Pryme@2026!` |
-| Move Academia | `admin.move` | `Move@2026!` |
+Consulte a [tabela de contas e o preparo do banco](../README.md). As senhas são definidas no `.env` da API, sem arquivos de credenciais no navegador.
 
-## Visão geral
+## Executar localmente
 
-| Item | Descrição |
-| --- | --- |
-| Objetivo | Gerenciar alunos, planos e treinos das duas academias em um único painel. |
-| Academias | Pryme Academia e Move Academia. |
-| Interface | Painel responsivo com identidade visual compartilhada com o aplicativo mobile. |
-| Dados iniciais | Registros fictícios para demonstração. Os indicadores usam 02/10/2026 como data-base. |
-| Mensalidades | Representam o valor dos planos ativos, não pagamentos recebidos. |
-
-## Funcionalidades
-
-| Área | Recursos |
-| --- | --- |
-| Visão geral | Indicadores por unidade ou consolidados. |
-| Alunos | Cadastro, edição, busca, filtros por situação e renovação. |
-| Planos | Criação e edição de planos, preços e benefícios. |
-| Treinos | Seleção de aluno em ordem alfabética, objetivo, frequência, exercícios, séries, repetições e descanso. |
-| Publicação | Rascunho, publicação no painel e prévia com conteúdo inspirado no app mobile. |
-| Persistência | Banco D1 e rotas protegidas por identidade na versão hospedada. |
-
-## Limite da integração mobile
-
-Publicar um treino salva o status no banco do painel. A versão atual ainda não envia notificações nem conecta automaticamente um aplicativo externo. Antes de usar dados reais, implemente a autenticação de alunos, as permissões por academia, a API do aplicativo mobile e a integração com o backend escolhido.
-
-## Desenvolvimento
-
-| Requisito | Versão / observação |
-| --- | --- |
-| Node.js | 22.13 ou superior (a prévia local foi validada no Node.js 24). |
-| Gerenciador | npm. |
-| Banco local | `node:sqlite`, gravado em `.local/gym.sqlite`. |
-| Migrações | Arquivos em `../banco/drizzle/`; aplique cada migração pendente uma única vez. |
+Com Node 22.13+ e a API ativa:
 
 ```sh
-npm ci
-npm run db:generate
-npm run build
-node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file ../banco/drizzle/0000_migration.sql
-npm run dev
+pnpm install
+LARAVEL_API_URL=http://127.0.0.1:8000/api pnpm preview:local
 ```
 
-Substitua `0000_migration.sql` pelo nome real da primeira migração em `../banco/drizzle/`.
+Abra <http://127.0.0.1:5173/>. O comando gera o cliente e a ponte de autenticação em `local-build/`, que não é versionado. Reinicie esse comando após alterar o código da ponte.
 
-## Arquivos principais
+## Navegação e dados
 
-| Arquivo | Responsabilidade |
-| --- | --- |
-| `app/dashboard.tsx` | Telas, navegação, formulários e montagem de treinos. |
-| `app/globals.css` | Identidade visual, Montserrat e responsividade. |
-| `app/api/gym/route.ts` | Validação, autorização e persistência. |
-| `db/schema.ts` | Estrutura do banco. |
-| `lib/gym.ts` | Tipos e dados fictícios iniciais. |
-| `public/logos/` | Logos Pryme e Move usados no seletor de academia. |
+- **Sair e voltar ao login** encerra a sessão e permite trocar de conta.
+- O seletor de academia e os botões das unidades filtram os dados e limpam filtros anteriores.
+- Cadastre um plano antes de salvar uma matrícula. Alunos existentes não podem ser transferidos de academia nesse formulário.
+- Selecione um aluno para montar, visualizar, salvar como rascunho ou publicar um treino.
+- A prévia permite voltar à edição; campos inválidos reaparecem para correção antes de salvar.
+- Treinos publicados são disponibilizados pela API para o app do aluno.
 
-As fontes são incluídas em `public/fonts` para evitar dependência de carregamento externo.
+O token da API é guardado em cookie HttpOnly. As restrições são verificadas no servidor, mesmo quando alguém chama a API diretamente.
 
-## Abrir a versão local pronta
+## Verificação
 
-| Passo | Ação |
-| --- | --- |
-| 1 | Abra `iniciar.cmd` no Windows ou execute `node scripts/local-server.mjs` nesta pasta. |
-| 2 | Acesse [http://127.0.0.1:5173](http://127.0.0.1:5173). |
-| 3 | Mantenha o terminal aberto enquanto usa o painel. |
+```sh
+pnpm test
+pnpm exec tsc --noEmit
+pnpm build:local
+```
 
-A versão local compilada está em `local-build/` e não precisa de `npm install`. O servidor atende somente em `127.0.0.1`; nunca o exponha diretamente à rede. O banco local e o D1 hospedado são separados.
-
-## Login administrativo local
-
-| Informação | Detalhe |
-| --- | --- |
-| Entrada | Acesse `/login`. |
-| Usuário inicial | `admin`. |
-| Senha | Gerada aleatoriamente na primeira configuração e exibida no terminal; não existe senha fixa no código. |
-| Armazenamento | Hash scrypt em `.local/admin.json`. |
-| Sessão | Cookie HttpOnly/SameSite=Strict, validade de oito horas e revogação ao sair. |
-| Proteção | Limite de tentativas; reiniciar o servidor encerra as sessões. |
-
-As credenciais locais não integram o pacote de código. A autenticação hospedada é separada.
-
-## Administradores e unidades
-
-| Usuário | Escopo de acesso |
-| --- | --- |
-| `admin` | Acesso geral às duas academias. |
-| `admin.prime` | Somente alunos e treinos da Pryme Academia. |
-| `admin.move` | Somente alunos e treinos da Move Academia. |
-
-As restrições são verificadas no servidor, inclusive em consultas e alterações por identificador. Administradores de unidade não podem transferir alunos nem associar treinos a alunos externos. Planos compartilhados da rede são somente leitura para essas contas; cada unidade pode criar seus próprios planos. Em uma instalação nova, o servidor gera as três contas e informa as senhas iniciais no terminal.
-
-## Organização do repositório
-
-- `banco/`: SQL MySQL e migrações SQLite/D1.
-- `app/`: projeto Android extraído e ZIP original. Abra essa pasta no Android Studio.
-- `web/`: aplicação web, recursos públicos, scripts e versão local compilada.
-- `layout(figma)/`: os 12 PDFs exportados do Figma.
-
-Execute os comandos web dentro desta pasta. O módulo Android está em `../app/app`, e os PDFs ficam em `../layout(figma)`.
+Os testes de autorização por academia ficam em `../api/tests/Feature/PanelAccessTest.php` (`php artisan test`).
