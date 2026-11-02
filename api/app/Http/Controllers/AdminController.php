@@ -28,7 +28,7 @@ class AdminController extends Controller
 
         return response()->json([
             'students' => $this->students($allowed),
-            'plans' => $this->plans($allowed),
+            'plans' => $this->plans($request->user()->administeredGymIds()),
             'workouts' => $this->workouts($allowed),
         ]);
     }
@@ -37,6 +37,10 @@ class AdminController extends Controller
     {
         $allowed = $this->allowedGymIds($request);
         $kind = $request->validate(['kind' => ['required', Rule::in(['students', 'plans', 'workouts'])]])['kind'];
+        if ($kind !== 'workouts') {
+            $allowed = $request->user()->administeredGymIds();
+            abort_if($allowed === [], 403, 'Somente administradores podem alterar alunos e planos.');
+        }
         $record = $request->input('record');
         abort_unless(is_array($record), 400, 'Registro inválido.');
 
@@ -90,6 +94,10 @@ class AdminController extends Controller
 
     private function plans(?array $allowed): array
     {
+        if ($allowed === []) {
+            return [];
+        }
+
         return Plan::with('features')
             ->when($allowed !== null, fn ($q) => $q->where(fn ($q) => $q->whereNull('gym_id')->orWhereIn('gym_id', $allowed)))
             ->orderBy('price')->get()
@@ -252,6 +260,7 @@ class AdminController extends Controller
             'id' => ['required', 'string'],
             'name' => ['required', 'string', 'min:2', 'max:100'],
             'student' => ['required', 'string'],
+            'unit' => ['required', 'string'],
             'goal' => ['required', 'string', 'max:150'],
             'status' => ['required', Rule::in(['Rascunho', 'Publicado'])],
             'days' => ['required', 'string', 'max:200'],
@@ -262,8 +271,9 @@ class AdminController extends Controller
             'exercises.*.rest' => ['required', 'integer', 'min:0', 'max:600'],
         ]);
 
+        $gym = $this->gymByName($data['unit'], $allowed);
         $gymId = ctype_digit($data['student'])
-            ? DB::table('gym_user_roles')->where('user_id', $data['student'])->where('role', 'student')->value('gym_id')
+            ? DB::table('gym_user_roles')->where('user_id', $data['student'])->where('role', 'student')->where('gym_id', $gym->id)->value('gym_id')
             : null;
         abort_unless($gymId, 400, 'Selecione um aluno válido.');
         $gymId = (int) $gymId;
@@ -281,7 +291,7 @@ class AdminController extends Controller
         $plan = ctype_digit($data['id']) ? WorkoutPlan::find($data['id']) : null;
         if ($plan) {
             $this->authorizeGym($allowed, (int) $plan->gym_id);
-            abort_unless((int) $plan->student_id === (int) $data['student'], 400, 'Não é possível trocar o aluno de uma ficha; crie uma nova.');
+            abort_unless((int) $plan->student_id === (int) $data['student'] && (int) $plan->gym_id === $gymId, 400, 'Não é possível trocar o aluno de uma ficha; crie uma nova.');
         }
 
         $plan = DB::transaction(function () use ($plan, $data, $gymId, $exercises) {
@@ -331,8 +341,8 @@ class AdminController extends Controller
     /** IDs das academias do admin logado; null = admin geral. */
     private function allowedGymIds(Request $request): ?array
     {
-        $ids = $request->user()->administeredGymIds();
-        abort_if($ids !== null && $ids === [], 403, 'Acesso restrito a administradores.');
+        $ids = $request->user()->panelGymIds();
+        abort_if($ids !== null && $ids === [], 403, 'Acesso restrito a administradores e personais da academia.');
 
         return $ids === null ? null : array_map('intval', $ids);
     }
