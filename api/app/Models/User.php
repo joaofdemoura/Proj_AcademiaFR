@@ -61,6 +61,20 @@ class User extends Authenticatable
             return null;
         }
 
-        return $this->roles->where('role', 'admin')->pluck('gym_id')->values()->all();
+        return $this->activeGymIdsForRoles(['admin']);
+    }
+
+    /** Unidades ativas que permitem consultar alunos e preparar treinos. */
+    public function panelGymIds(): ?array
+    {
+        return $this->is_global_admin ? null : $this->activeGymIdsForRoles(['admin', 'instructor']);
+    }
+
+    private function activeGymIdsForRoles(array $roles): array
+    {
+        $activeIds = $this->gyms()->wherePivot('status', 'active')->where('gyms.active', true)->pluck('gyms.id');
+
+        return $this->roles()->whereIn('role', $roles)->whereIn('gym_id', $activeIds)
+            ->pluck('gym_id')->map(fn ($id) => (int) $id)->unique()->values()->all();
     }
 }
