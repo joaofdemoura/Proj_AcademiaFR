@@ -58,6 +58,7 @@ public class MainActivity extends AppCompatActivity {
     private int day = 15, discount = 40, selectedWorkout;
     private long gymId, chosenPlanId;
     private boolean loud = true, training, signingIn;
+    private int sessionGeneration;
     private final Set<String> reservations = new HashSet<>(Arrays.asList("15:3"));
     private final Set<Integer> completed = new HashSet<>();
     private final ArrayList<String> history = new ArrayList<>();
@@ -107,6 +108,28 @@ public class MainActivity extends AppCompatActivity {
                 else finish();
             }
         });
+        show(screen);
+    }
+
+    @Override protected void onRestart() {
+        super.onRestart();
+        if (ApiClient.getToken() != null) {
+            invalidateWorkouts();
+            show(screen);
+        }
+    }
+
+    private void invalidateWorkouts() {
+        workoutPlans = null;
+        loadErrors.remove("workouts");
+        selectedWorkout = 0;
+        completed.clear();
+        training = false;
+    }
+
+    private void refreshWorkouts() {
+        if (loading.contains("workouts")) return;
+        invalidateWorkouts();
         show(screen);
     }
 
@@ -197,8 +220,10 @@ public class MainActivity extends AppCompatActivity {
         }
         if (showStatus) add(body, text("Carregando…", 14, muted), 16);
         if (loading.add(key)) {
+            final int generation = sessionGeneration;
             call.get().enqueue(new Callback<T>() {
                 @Override public void onResponse(Call<T> c, Response<T> r) {
+                    if (generation != sessionGeneration || isDestroyed()) return;
                     loading.remove(key);
                     if (r.code() == 401) { sessionExpired(); return; }
                     if (r.isSuccessful() && r.body() != null) store.accept(r.body());
@@ -206,6 +231,7 @@ public class MainActivity extends AppCompatActivity {
                     if (!isFinishing()) show(screen);
                 }
                 @Override public void onFailure(Call<T> c, Throwable t) {
+                    if (generation != sessionGeneration || isDestroyed()) return;
                     loading.remove(key); loadErrors.put(key, ApiClient.OFFLINE);
                     if (!isFinishing()) show(screen);
                 }
@@ -215,6 +241,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void clearSession() {
+        sessionGeneration++;
+        loading.clear();
+        selectedWorkout = 0;
+        training = false;
         ApiClient.setToken(null);
         getPreferences(MODE_PRIVATE).edit().putBoolean("remember", false).remove("token").apply();
         user = null; workoutPlans = null; memberships = null; gymPlans = null; gymId = 0; academy = "";
@@ -229,6 +259,9 @@ public class MainActivity extends AppCompatActivity {
     // ------------------------------------------------------------ telas
 
     private void show(String destination) {
+        if (!destination.equals(screen) && (destination.equals("workout") || destination.equals("home") || destination.equals("manager"))) {
+            invalidateWorkouts();
+        }
         screen = destination; root = column(); root.setBackgroundColor(ink);
         ViewCompat.setOnApplyWindowInsetsListener(root, (v, insets) -> {
             androidx.core.graphics.Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
@@ -286,6 +319,10 @@ public class MainActivity extends AppCompatActivity {
                                 : ApiClient.errorMessage(r, "Não foi possível entrar. Tente novamente.");
                         pass.setError(message); notice(message); return;
                     }
+                    sessionGeneration++;
+                    loading.clear();
+                    selectedWorkout = 0;
+                    training = false;
                     ApiClient.setToken(r.body().token);
                     user = r.body().user; userName = user.firstName();
                     workoutPlans = null; memberships = null; gymPlans = null; loadErrors.clear(); completed.clear();
@@ -385,10 +422,11 @@ public class MainActivity extends AppCompatActivity {
         Models.WorkoutPlan current = currentWorkout();
         header(current != null && current.scheduleDescription != null ? current.scheduleDescription.toUpperCase() : "SUA FICHA", "SEU TREINO");
         if (!ensure("workouts", workoutPlans, () -> ApiClient.get().workouts(), w -> workoutPlans = w, true)) return;
+        add(body, button("ATUALIZAR TREINOS", false, this::refreshWorkouts), 16);
         if (workoutPlans.isEmpty()) {
             LinearLayout c = card(); add(c, bold("Nenhuma ficha publicada", 20), 8);
             add(c, text("Quando seu professor publicar uma ficha no painel, ela aparece aqui.", 13, muted), 16);
-            add(c, button("ATUALIZAR", false, () -> { workoutPlans = null; show("workout"); })); add(body, c);
+            add(body, c);
             return;
         }
         Models.WorkoutPlan plan = currentWorkout();

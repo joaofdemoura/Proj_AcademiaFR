@@ -26,3 +26,9 @@ apiHost=
 Em produção a API deve usar HTTPS; HTTP sem criptografia só está liberado para `10.0.2.2` e `localhost` (`res/xml/network_security_config.xml`).
 
 `ApiContractTest` (em `app/src/test`) testa o cliente contra a API do computador com o aluno de teste; se a API não estiver no ar, os testes são pulados.
+
+## Atualização dos treinos
+
+O app consulta novamente as fichas publicadas ao voltar do segundo plano e ao entrar em Treinos ou Início. A tela de Treinos também possui o botão ATUALIZAR TREINOS. Respostas pendentes de uma sessão encerrada são ignoradas para evitar carregar dados ao trocar de conta.
+
+Para que o treino apareça, publique a ficha vinculada ao aluno correto no painel e configure a web e o app para usar a mesma API e banco de dados.
