@@ -5,14 +5,14 @@
 const COOKIE = 'gym_token';
 const MAX_AGE = 8 * 60 * 60;
 
-export type PanelUser = {username: string; displayName: string; role: 'global_admin' | 'unit_admin'; unit: string | null};
+export type PanelUser = {username: string; displayName: string; role: 'global_admin' | 'unit_admin' | 'personal'; unit: string | null};
 
 type ApiUser = {
   name: string;
   username: string | null;
   email: string;
   is_global_admin: boolean;
-  gyms: {name: string; roles: string[]}[];
+  gyms: {name: string; status: string; roles: string[]}[];
 };
 
 function apiUrl(): string {
@@ -46,7 +46,7 @@ async function callApi(path: string, init: RequestInit & {token?: string | null}
   if (init.token) headers.set('authorization', `Bearer ${init.token}`);
   let res: Response;
   try {
-    res = await fetch(apiUrl() + path, {...init, headers});
+    res = await fetch(apiUrl() + path, {...init, headers, signal: AbortSignal.timeout(10000)});
   } catch {
     return {status: 503, body: {message: 'Não foi possível conectar à API. Verifique se ela está no ar.'}};
   }
@@ -63,8 +63,9 @@ function apiError(status: number, body: Record<string, unknown>, fallback: strin
 
 export function toPanelUser(user: ApiUser): PanelUser | null {
   if (user.is_global_admin) return {username: user.username || user.email, displayName: user.name, role: 'global_admin', unit: null};
-  const gym = user.gyms.find(g => g.roles.includes('admin'));
-  return gym ? {username: user.username || user.email, displayName: user.name, role: 'unit_admin', unit: gym.name} : null;
+  const gyms = user.gyms.filter(g => g.status === 'active');
+  const gym = gyms.find(g => g.roles.includes('admin')) || gyms.find(g => g.roles.includes('instructor'));
+  return gym ? {username: user.username || user.email, displayName: user.name, role: gym.roles.includes('admin') ? 'unit_admin' : 'personal', unit: gym.name} : null;
 }
 
 export async function handleLogin(req: Request): Promise<Response> {
@@ -85,7 +86,7 @@ export async function handleLogin(req: Request): Promise<Response> {
   const token = body.token as string;
   if (!toPanelUser(body.user as ApiUser)) {
     await callApi('/logout', {method: 'POST', token});
-    return json(403, {error: 'Acesso exclusivo para administradores.'});
+    return json(403, {error: 'Acesso exclusivo para administradores e personais.'});
   }
   return json(200, {ok: true}, cookie(req, token, MAX_AGE));
 }
@@ -96,7 +97,7 @@ export async function handleMe(req: Request): Promise<Response> {
   const {status, body} = await callApi('/me', {token});
   if (status !== 200) return apiError(status, body, 'Entre na sua conta.');
   const user = toPanelUser(body as unknown as ApiUser);
-  return user ? json(200, user) : json(403, {error: 'Acesso exclusivo para administradores.'});
+  return user ? json(200, user) : json(403, {error: 'Acesso exclusivo para administradores e personais.'});
 }
 
 export async function handleLogout(req: Request): Promise<Response> {
