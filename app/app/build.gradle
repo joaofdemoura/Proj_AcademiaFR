@@ -13,12 +13,18 @@ android {
         versionCode 1
         versionName '1.0'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+        // Credenciais de teste são opcionais e chegam apenas do ambiente local.
+        ['EMAIL':'e2eEmail', 'PASSWORD':'e2ePasswordBase64', 'TITLE':'e2eTitleBase64', 'COUNT':'e2eCount', 'SETS':'e2eSets'].each { key, argument ->
+            def value = System.getenv("ACADEMIA_E2E_${key}")
+            if (value) testInstrumentationRunnerArguments[argument] = key in ['PASSWORD', 'TITLE'] ? value.getBytes('UTF-8').encodeBase64().toString() : value
+        }
+
 
         // Endereço da API Laravel. No emulador, 10.0.2.2 é o próprio computador;
-        // o Host faz o Herd encontrar o site academia-api.test.
+        // porta 8000 corresponde a php artisan serve.
         // Para outro endereço, defina apiBaseUrl/apiHost no gradle.properties.
-        buildConfigField 'String', 'API_BASE_URL', "\"${project.findProperty('apiBaseUrl') ?: 'http://10.0.2.2/api/'}\""
-        buildConfigField 'String', 'API_HOST', "\"${project.hasProperty('apiHost') ? project.property('apiHost') : 'academia-api.test'}\""
+        buildConfigField 'String', 'API_BASE_URL', "\"${project.findProperty('apiBaseUrl') ?: 'http://10.0.2.2:8000/api/'}\""
+        buildConfigField 'String', 'API_HOST', "\"${project.hasProperty('apiHost') ? project.property('apiHost') : ''}\""
     }
 
     buildFeatures {
