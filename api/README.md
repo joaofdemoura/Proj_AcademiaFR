@@ -32,3 +32,9 @@ Envie-o nas demais chamadas: `Authorization: Bearer <token>`.
 | POST | `/api/admin/records` | painel: salva aluno, plano ou ficha (`{kind, record}`) |
 
 Admin geral (`users.is_global_admin`) vê todas as academias; admin de unidade (`gym_user_roles.role = 'admin'`) só a própria. Personal (`instructor`) consulta alunos e cria/edita treinos somente da unidade em que possui vínculo ativo. Personal não altera alunos ou planos e não recebe a lista de planos. Os dados de um treino incluem `unit`, validado junto ao aluno e ao registro existente. Consulte a tabela completa de contas no [README principal](../README.md).
+
+## Auditoria local com rollback
+
+`php artisan test` usa SQLite em memória. Para validar cadastros, matrícula, publicação e edição com as restrições reais do MySQL, execute `php scripts/audit-mysql.php --run-local` no ambiente de desenvolvimento já preparado. Os registros criados pelo script ficam numa transação revertida ao final; as contas admin e personal.prime devem existir.
+
+A API também pode ser iniciada sem Herd: `php artisan serve --host=127.0.0.1 --port=8000`. Essa é a configuração padrão do emulador e do guia principal.
