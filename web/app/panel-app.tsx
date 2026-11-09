@@ -10,7 +10,7 @@ export default function PanelApp(){
   try{const r=await fetch('/api/auth/me');setUser(r.ok?await r.json():null)}
   catch{setUser(null)}finally{setLoading(false)}
  }
- useEffect(()=>{void refreshSession();const restore=()=>void refreshSession();window.addEventListener('pageshow',restore);return()=>window.removeEventListener('pageshow',restore)},[]);
+ useEffect(()=>{fetch('/api/auth/me').then(async r=>setUser(r.ok?await r.json():null)).catch(()=>setUser(null)).finally(()=>setLoading(false));const restore=()=>void refreshSession();window.addEventListener('pageshow',restore);return()=>window.removeEventListener('pageshow',restore)},[]);
  if(loading)return <div className="loading">Carregando…</div>;
  return user?<Dashboard currentUser={user} onLogout={()=>{setUser(null);window.history.replaceState(null,'','/login')}}/>:<Login onAuthenticated={async()=>{await refreshSession();window.history.replaceState(null,'','/')}}/>;
 }
