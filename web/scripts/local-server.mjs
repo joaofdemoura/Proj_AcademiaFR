@@ -23,5 +23,6 @@ http.createServer(async(req,res)=>{try{
  const asset=url.pathname==='/app.js'?path.join(root,'local-build/app.js'):url.pathname==='/style.css'?path.join(root,'app/globals.css'):path.resolve(root,'public','.'+url.pathname);
  if(!asset.startsWith(root+path.sep)){res.writeHead(403);res.end();return}
  const mime={'.js':'application/javascript','.css':'text/css','.svg':'image/svg+xml','.png':'image/png','.woff2':'font/woff2'};
- res.writeHead(200,{'content-type':mime[path.extname(asset)]||'application/octet-stream'});res.end(await readFile(asset));
- }catch(e){if(!res.headersSent)res.writeHead(500);res.end('Não foi possível carregar.');console.error(e.message)}}).listen(port,'127.0.0.1',()=>console.log(`Local: ${origin}\nAPI: ${process.env.LARAVEL_API_URL||'http://academia-api.test/api'}`));
+ const contents=await readFile(asset);
+ res.writeHead(200,{'content-type':mime[path.extname(asset)]||'application/octet-stream'});res.end(contents);
+ }catch(e){if(!res.headersSent)res.writeHead(e.code==='ENOENT'?404:500);res.end(e.code==='ENOENT'?'Não encontrado.':'Não foi possível carregar.');if(e.code!=='ENOENT')console.error(e.message)}}).listen(port,'127.0.0.1',()=>console.log(`Local: ${origin}\nAPI: ${process.env.LARAVEL_API_URL||'http://academia-api.test/api'}`));
