@@ -3,8 +3,9 @@ CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, email TEXT 
 CREATE TABLE gyms (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, active INTEGER DEFAULT 1, created_at TEXT, updated_at TEXT);
 CREATE TABLE gym_users (gym_id INTEGER, user_id INTEGER, status TEXT, joined_at TEXT, PRIMARY KEY(gym_id,user_id));
 CREATE TABLE gym_user_roles (gym_id INTEGER, user_id INTEGER, role TEXT, PRIMARY KEY(gym_id,user_id,role));
-CREATE TABLE memberships (id INTEGER PRIMARY KEY, gym_id INTEGER, user_id INTEGER, ends_on TEXT);
-CREATE TABLE plans (id INTEGER PRIMARY KEY, gym_id INTEGER, name TEXT, price NUMERIC);
+CREATE TABLE memberships (id INTEGER PRIMARY KEY AUTOINCREMENT, gym_id INTEGER, user_id INTEGER, plan_id INTEGER, status TEXT, starts_on TEXT, ends_on TEXT, contracted_price NUMERIC, cancelled_at TEXT, created_at TEXT, updated_at TEXT);
+CREATE TABLE plans (id INTEGER PRIMARY KEY AUTOINCREMENT, gym_id INTEGER, name TEXT, description TEXT, billing_period TEXT, price NUMERIC, active INTEGER DEFAULT 1, currency TEXT DEFAULT 'BRL', created_at TEXT, updated_at TEXT);
+CREATE TABLE plan_gyms (gym_id INTEGER, plan_id INTEGER, PRIMARY KEY(gym_id,plan_id));
 CREATE TABLE plan_features (id INTEGER PRIMARY KEY, plan_id INTEGER, description TEXT, sort_order INTEGER);
 CREATE TABLE workout_plans (id INTEGER PRIMARY KEY AUTOINCREMENT, gym_id INTEGER, student_id INTEGER, instructor_id INTEGER, name TEXT, goal TEXT, version INTEGER DEFAULT 1, status TEXT, published_at TEXT, archived_at TEXT, schedule_description TEXT, created_at TEXT, updated_at TEXT);
 CREATE TABLE workout_days (id INTEGER PRIMARY KEY AUTOINCREMENT, workout_plan_id INTEGER, label TEXT, title TEXT, sort_order INTEGER);
