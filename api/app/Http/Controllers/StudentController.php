@@ -36,7 +36,7 @@ class StudentController extends Controller
     public function plans(Request $request, Gym $gym): JsonResponse
     {
         $user = $request->user();
-        abort_unless($user->is_global_admin || $user->gyms()->whereKey($gym->id)->exists(), 403, 'Você não faz parte desta academia.');
+        abort_unless($user->is_global_admin || $user->gyms()->whereKey($gym->id)->wherePivot('status', 'active')->where('gyms.active', true)->exists(), 403, 'Você não faz parte desta academia.');
 
         return response()->json(
             $gym->plans()->where('active', true)->with('features')->orderBy('price')->get()

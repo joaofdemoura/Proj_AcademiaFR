@@ -62,7 +62,7 @@ class AuthController extends Controller
             'gyms' => $user->gyms->map(fn ($gym) => [
                 'id' => $gym->id,
                 'name' => $gym->name,
-                'status' => $gym->pivot->status,
+                'status' => $gym->active ? $gym->pivot->status : 'inactive',
                 'roles' => $user->roles->where('gym_id', $gym->id)->pluck('role')->values(),
             ])->values(),
         ];

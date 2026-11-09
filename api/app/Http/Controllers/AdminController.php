@@ -20,7 +20,7 @@ use Illuminate\Validation\Rule;
  */
 class AdminController extends Controller
 {
-    private const STATUS_TO_DB = ['Ativo' => 'active', 'Pendente' => 'pending'];
+    private const STATUS_TO_DB = ['Ativo' => 'active', 'Pendente' => 'pending', 'Inativo' => 'cancelled'];
 
     public function data(Request $request): JsonResponse
     {
@@ -152,6 +152,8 @@ class AdminController extends Controller
 
     private function saveStudent(array $record, ?array $allowed): array
     {
+        $existing = isset($record['id']) && is_string($record['id']) && ctype_digit($record['id'])
+            ? User::find($record['id']) : null;
         $data = $this->validateRecord($record, [
             'id' => ['required', 'string'],
             'name' => ['required', 'string', 'min:2', 'max:100'],
@@ -160,6 +162,7 @@ class AdminController extends Controller
             'plan' => ['required', 'string'],
             'status' => ['required', Rule::in(['Ativo', 'Pendente', 'Inativo'])],
             'expires' => ['required', 'date_format:Y-m-d'],
+            'password' => [$existing ? 'nullable' : 'required', 'string', 'min:8', 'max:255'],
         ]);
 
         $gym = $this->gymByName($data['unit'], $allowed);
@@ -167,7 +170,7 @@ class AdminController extends Controller
         abort_unless($plan, 400, 'Selecione um plano válido.');
         abort_unless($plan->gyms()->whereKey($gym->id)->exists(), 400, 'O plano não está disponível nesta unidade.');
 
-        $user = ctype_digit($data['id']) ? User::find($data['id']) : null;
+        $user = $existing;
         if ($user) {
             $gymIds = DB::table('gym_user_roles')->where('user_id', $user->id)->where('role', 'student')->pluck('gym_id')->map(fn ($id) => (int) $id);
             abort_if($gymIds->isEmpty(), 404, 'Aluno não encontrado.');
@@ -176,7 +179,10 @@ class AdminController extends Controller
         abort_if(User::where('email', $data['email'])->when($user, fn ($q) => $q->whereKeyNot($user->id))->exists(), 400, 'Já existe uma conta com este e-mail.');
 
         DB::transaction(function () use (&$user, $data, $gym, $plan) {
-            $user ??= new User;
+            if (! $user) {
+                $user = new User;
+                $user->password = $data['password'];
+            }
             $user->fill(['name' => $data['name'], 'email' => $data['email']])->save();
 
             DB::table('gym_users')->upsert(
@@ -195,7 +201,8 @@ class AdminController extends Controller
             if ($m->starts_on > $m->ends_on) {
                 $m->starts_on = $m->ends_on;
             }
-            $m->status = self::STATUS_TO_DB[$data['status']] ?? $m->status;
+            $m->status = self::STATUS_TO_DB[$data['status']];
+            $m->cancelled_at = $data['status'] === 'Inativo' ? now() : null;
             $m->save();
         });
 
@@ -283,7 +290,7 @@ class AdminController extends Controller
             abort_unless(preg_match('/^\s*(\d{1,3})\s*(?:[-–—a]\s*(\d{1,3}))?\s*$/u', $e['reps'], $m), 400, 'Repetições devem ser um número ou um intervalo, ex.: 10–12.');
             $min = (int) $m[1];
             $max = isset($m[2]) ? (int) $m[2] : $min;
-            abort_if($max < $min, 400, 'No intervalo de repetições, o primeiro número deve ser o menor.');
+            abort_if($min < 1 || $max < $min, 400, 'Repetições devem ser positivas e o primeiro número deve ser o menor.');
 
             return [...$e, 'min' => $min, 'max' => $max];
         });
