@@ -94,4 +94,46 @@ class PanelAccessTest extends TestCase
         $this->loginAs(3);
         $this->getJson('/api/admin/data')->assertForbidden();
     }
+    public function test_inactive_student_cannot_read_gym_plans(): void
+    {
+        $this->loginAs(1);
+        DB::table('gym_users')->where('user_id', 1)->update(['status' => 'inactive']);
+        $this->getJson('/api/gyms/1/plans')->assertForbidden();
+    }
+
+    public function test_disabled_gym_does_not_allow_student_plan_access(): void
+    {
+        $this->loginAs(1);
+        DB::table('gyms')->where('id', 1)->update(['active' => false]);
+        $this->getJson('/api/gyms/1/plans')->assertForbidden();
+    }
+
+    public function test_student_registration_password_duplicates_and_edits_are_consistent(): void
+    {
+        $plan = DB::table('plans')->insertGetId(['gym_id' => 1, 'name' => 'Plano teste', 'price' => 99, 'billing_period' => 'monthly']);
+        DB::table('plan_gyms')->insert(['gym_id' => 1, 'plan_id' => $plan]);
+        $this->loginAs(7);
+        $record = ['id' => 'new', 'name' => 'Novo Aluno', 'email' => 'novo@example.com', 'unit' => 'Pryme Academia',
+            'plan' => (string) $plan, 'status' => 'Ativo', 'expires' => now()->addMonth()->toDateString()];
+        $this->postJson('/api/admin/records', ['kind' => 'students', 'record' => $record])->assertStatus(400);
+        $password = bin2hex(random_bytes(12));
+        $record['password'] = $password;
+        $response = $this->postJson('/api/admin/records', ['kind' => 'students', 'record' => $record])
+            ->assertOk()->assertJsonMissingPath('record.password');
+        $id = $response->json('record.id');
+        $hash = User::findOrFail($id)->password;
+        $this->assertTrue(\Illuminate\Support\Facades\Hash::check($password, $hash));
+        $this->postJson('/api/admin/records', ['kind' => 'students', 'record' => $record])->assertStatus(400);
+        unset($record['password']);
+        $record['id'] = $id;
+        $record['status'] = 'Inativo';
+        $this->postJson('/api/admin/records', ['kind' => 'students', 'record' => $record])->assertOk();
+        $this->assertSame($hash, User::findOrFail($id)->password);
+        $this->assertSame('cancelled', DB::table('memberships')->where('user_id', $id)->value('status'));
+        $record['status'] = 'Ativo';
+        $this->postJson('/api/admin/records', ['kind' => 'students', 'record' => $record])->assertOk();
+        $this->assertSame('active', DB::table('memberships')->where('user_id', $id)->value('status'));
+        $this->assertNull(DB::table('memberships')->where('user_id', $id)->value('cancelled_at'));
+    }
+
 }
