@@ -18,6 +18,8 @@ Contas destinadas a desenvolvimento local. Defina as senhas dos administradores 
 | Aluno — Thiago Rocha | `thiago.rocha@example.com` | Move | Próprios dados e treinos no app; sem acesso ao painel |
 | Aluna — Beatriz Nunes | `beatriz.nunes@example.com` | Move | Próprios dados e treinos no app; sem acesso ao painel |
 
+Novos alunos cadastrados no web recebem uma senha inicial de pelo menos 8 caracteres; editar a matrícula preserva a senha existente. E-mails duplicados são recusados.
+
 ## Preparar as contas e executar
 
 1. Em um MySQL vazio, importe `banco/academiafinal.sql`. Ele cria as duas academias e os quatro alunos fictícios. Não execute a migração web novamente sobre esse esquema completo.
@@ -44,3 +46,8 @@ O SQL não cadastra planos ou treinos. Cadastre um plano antes de matricular um 
 - API: em `api/`, execute `php artisan test`. Os testes de permissões usam SQLite em memória, sem alterar o MySQL local.
 - Web: em `web/`, execute `pnpm test`, `pnpm exec tsc --noEmit` e `pnpm build:local`.
 - Confira no navegador: troca de unidade com `admin`, sair e entrar com cada personal, criação/edição de treino e bloqueio do login de aluno no painel.
+
+
+## Cobertura da auditoria
+
+Veja `docs/validacao-2026-11-09.md` para o que foi executado, os fluxos de persistência e os limites atuais. O banco efetivo da aplicação é o MySQL da API; `banco/drizzle/` e `web/db/` são estrutura auxiliar do template, sem uso pelas telas da academia.
