@@ -21,3 +21,10 @@ Respeite o limite de login da API ao executar as suítes reais. Não versione cr
 Aulas e reservas, medidas/evolução, sequência e promoções ainda são demonstrações no Android. As marcações de execução de exercícios não constituem histórico persistido no servidor. Contratação de plano orienta procurar a recepção; não há pagamento integrado.
 
 Os PDFs são referências estáticas. A estrutura Drizzle/D1 é auxiliar ao template, enquanto as telas da academia usam a API/MySQL. Compilação e testes locais não substituem validação em aparelhos físicos, outros sistemas operacionais ou publicação em serviços de hospedagem.
+
+
+## Conferência adicional de perfis
+
+A suíte da API passou com 12 testes e 111 asserções. Os cenários adicionais verificam que cada administrador de unidade cadastra e edita alunos, planos e treinos da própria academia, enquanto tentativas contra a outra unidade são recusadas, inclusive com IDs forjados. O administrador geral publica em ambas as unidades e é o único que pode editar planos da rede. Personais continuam limitados aos treinos e alunos da própria unidade; alunos não recebem acesso ao painel.
+
+O nível de acesso vem do perfil e dos vínculos ativos da conta no servidor. Entrar com o e-mail ou o nome de usuário da mesma conta não altera essas permissões. As restrições do servidor permanecem necessárias mesmo quando os botões da interface estão limitados por perfil.
