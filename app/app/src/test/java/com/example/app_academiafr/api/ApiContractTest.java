@@ -17,12 +17,14 @@ import retrofit2.Response;
 /**
  * Testa o cliente do app contra a API Laravel rodando no computador (Herd).
  * Usa o aluno de teste do banco (bloco [TESTE] de banco/academiafinal.sql).
- * Se a API não estiver no ar, os testes são pulados.
+ * Ative com ACADEMIA_TEST_API_URL. Quando configurada, API indisponível falha o teste.
  */
 public class ApiContractTest {
-    private static final String LOCAL_API = "http://127.0.0.1/api/";
+    private static final String LOCAL_API = System.getenv("ACADEMIA_TEST_API_URL");
 
     @BeforeClass public static void pointToLocalApi() {
+        assumeTrue("Defina ACADEMIA_TEST_API_URL para executar a integração real", LOCAL_API != null);
+        ApiClient.setToken(null);
         ApiClient.baseUrl = LOCAL_API;
         boolean up;
         try {
@@ -30,7 +32,7 @@ public class ApiContractTest {
         } catch (Exception e) {
             up = false;
         }
-        assumeTrue("API local fora do ar; testes pulados", up);
+        assertTrue("A API configurada não respondeu HTTP 401 em /me", up);
     }
 
     @After public void signOut() throws Exception {
