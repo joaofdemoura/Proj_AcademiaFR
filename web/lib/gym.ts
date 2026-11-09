@@ -1,4 +1,4 @@
-export type Student = {id:string;name:string;email:string;unit:string;plan:string;status:string;expires:string};
+export type Student = {id:string;name:string;email:string;unit:string;plan:string;status:string;expires:string;password?:string};
 export type Plan = {id:string;name:string;price:number;features:string;unit:string};
 export type Exercise = {name:string;sets:number;reps:string;rest:number};
 export type Workout = {id:string;name:string;student:string;unit:string;goal:string;status:string;days:string;exercises:Exercise[];updated:string};
