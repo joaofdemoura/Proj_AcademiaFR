@@ -136,4 +136,52 @@ class PanelAccessTest extends TestCase
         $this->assertNull(DB::table('memberships')->where('user_id', $id)->value('cancelled_at'));
     }
 
+    public function test_each_unit_admin_can_manage_own_records_and_cannot_forge_other_unit_ids(): void
+    {
+        $this->loginAs(7);
+        $plans = [];
+        foreach ([1 => 'Pryme Academia', 2 => 'Move Academia'] as $gym => $unit) {
+            $record = ['id' => 'new', 'name' => 'Plano '.$gym, 'price' => 90, 'features' => 'Musculação', 'unit' => $unit];
+            $plans[$gym] = $this->postJson('/api/admin/records', ['kind' => 'plans', 'record' => $record])->assertOk()->json('record');
+        }
+        foreach ([5 => [1, 2], 6 => [2, 1]] as $admin => [$gym, $other]) {
+            $this->loginAs($admin);
+            $plan = $plans[$gym];
+            $plan['price'] = 110;
+            $this->postJson('/api/admin/records', ['kind' => 'plans', 'record' => $plan])->assertOk()->assertJsonPath('record.price', 110);
+            $student = ['id' => 'new', 'name' => 'Aluno da unidade '.$gym, 'email' => 'unidade'.$gym.'@example.com',
+                'password' => bin2hex(random_bytes(12)), 'unit' => $plan['unit'], 'plan' => $plan['id'], 'status' => 'Ativo', 'expires' => now()->addMonth()->toDateString()];
+            $saved = $this->postJson('/api/admin/records', ['kind' => 'students', 'record' => $student])->assertOk()->json('record');
+            $saved['name'] = 'Aluno editado '.$gym;
+            $this->postJson('/api/admin/records', ['kind' => 'students', 'record' => $saved])->assertOk()->assertJsonPath('record.name', $saved['name']);
+            $this->postJson('/api/admin/records', $this->workout((int) $saved['id'], $plan['unit']))->assertOk();
+            $foreign = $plans[$other];
+            $this->postJson('/api/admin/records', ['kind' => 'plans', 'record' => $foreign])->assertForbidden();
+            $foreign['unit'] = $plan['unit'];
+            $this->postJson('/api/admin/records', ['kind' => 'plans', 'record' => $foreign])->assertForbidden();
+            $student['unit'] = $plans[$other]['unit'];
+            $student['plan'] = $plans[$other]['id'];
+            $this->postJson('/api/admin/records', ['kind' => 'students', 'record' => $student])->assertForbidden();
+            $this->postJson('/api/admin/records', $this->workout($other, $plans[$other]['unit']))->assertForbidden();
+            $this->getJson('/api/admin/data')->assertOk()->assertJsonCount(2, 'students');
+        }
+    }
+
+    public function test_global_admin_publishes_in_both_units_and_only_global_admin_edits_network_plans(): void
+    {
+        $this->loginAs(7);
+        foreach ([1 => 'Pryme Academia', 2 => 'Move Academia'] as $student => $unit) {
+            $this->postJson('/api/admin/records', $this->workout($student, $unit))->assertOk()->assertJsonPath('record.unit', $unit);
+        }
+        $record = ['id' => 'new', 'name' => 'Plano da rede', 'price' => 150, 'features' => 'Duas unidades', 'unit' => 'Todas'];
+        $network = $this->postJson('/api/admin/records', ['kind' => 'plans', 'record' => $record])->assertOk()->json('record');
+        foreach ([5 => 'Pryme Academia', 6 => 'Move Academia'] as $admin => $unit) {
+            $this->loginAs($admin);
+            $this->getJson('/api/admin/data')->assertOk()->assertJsonCount(1, 'plans');
+            $this->postJson('/api/admin/records', ['kind' => 'plans', 'record' => $network])->assertForbidden();
+            $forged = [...$network, 'unit' => $unit];
+            $this->postJson('/api/admin/records', ['kind' => 'plans', 'record' => $forged])->assertForbidden();
+        }
+    }
+
 }
