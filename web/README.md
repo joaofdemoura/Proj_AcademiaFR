@@ -19,7 +19,7 @@ Abra <http://127.0.0.1:5173/>. O comando gera o cliente e a ponte de autenticaç
 
 - **Sair e voltar ao login** encerra a sessão e permite trocar de conta.
 - O seletor de academia e os botões das unidades filtram os dados e limpam filtros anteriores.
-- Cadastre um plano antes de salvar uma matrícula. Alunos existentes não podem ser transferidos de academia nesse formulário.
+- Cadastre um plano antes de salvar uma matrícula. Para novos alunos, informe uma senha inicial do app (mínimo de 8 caracteres); a edição preserva a senha existente. Um e-mail já cadastrado deve ser editado na lista, pois um segundo cadastro é recusado. Alunos existentes não podem ser transferidos de academia nesse formulário.
 - Selecione um aluno para montar, visualizar, salvar como rascunho ou publicar um treino.
 - A prévia permite voltar à edição; campos inválidos reaparecem para correção antes de salvar.
 - Treinos publicados são disponibilizados pela API para o app do aluno.
@@ -35,3 +35,7 @@ pnpm build:local
 ```
 
 Os testes de autorização por academia ficam em `../api/tests/Feature/PanelAccessTest.php` (`php artisan test`).
+
+## Build completo no Mac
+
+Além da execução local simplificada, `pnpm build` compila o framework completo. Execute `LARAVEL_API_URL=http://127.0.0.1:8000/api pnpm start --port 5175` para servir esse build em Node no Mac. O comando escolhe o executor conforme o perfil local; o painel principal pode continuar na porta 5173.
