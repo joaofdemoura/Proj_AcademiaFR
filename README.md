@@ -6,17 +6,19 @@ Aplicativo Android dos alunos (`app/`), painel web (`web/`), API Laravel (`api/`
 
 Contas destinadas a desenvolvimento local. Defina as senhas dos administradores e personais no `.env`, que não é versionado. Os alunos fictícios são criados pelo SQL de demonstração; administradores e personais entram no painel web. Não use os dados de demonstração em produção.
 
-| Perfil / nome | Usuário ou e-mail | Academia | Acesso |
-|---|---|---|---|
-| Administrador geral | `admin` | Pryme e Move | Trocar de academia; cadastrar alunos e planos; criar e publicar treinos |
-| Administrador Pryme | `admin.prime` | Pryme | Gestão apenas da Pryme; planos da rede em leitura |
-| Administrador Move | `admin.move` | Move | Gestão apenas da Move; planos da rede em leitura |
-| Personal Pryme | `personal.prime` | Pryme | Consultar alunos e criar/publicar treinos da Pryme; sem alterar alunos ou planos |
-| Personal Move | `personal.move` | Move | Consultar alunos e criar/publicar treinos da Move; sem alterar alunos ou planos |
-| Aluno — Gabriel Souza | `gabriel.souza@example.com` | Pryme | Próprios dados e treinos no app; sem acesso ao painel |
-| Aluna — Larissa Mendes | `larissa.mendes@example.com` | Pryme | Próprios dados e treinos no app; sem acesso ao painel |
-| Aluno — Thiago Rocha | `thiago.rocha@example.com` | Move | Próprios dados e treinos no app; sem acesso ao painel |
-| Aluna — Beatriz Nunes | `beatriz.nunes@example.com` | Move | Próprios dados e treinos no app; sem acesso ao painel |
+| Perfil / nome | Usuário ou e-mail | Senha de teste | Academia | Acesso |
+|---|---|---|---|---|
+| Administrador geral | `admin` | `AdminGeral@2026!` | Pryme e Move | Trocar de academia; cadastrar alunos e planos; criar e publicar treinos |
+| Administrador Pryme | `admin.prime` | `AdminPryme@2026!` | Pryme | Gestão apenas da Pryme; planos da rede em leitura |
+| Administrador Move | `admin.move` | `AdminMove@2026!` | Move | Gestão apenas da Move; planos da rede em leitura |
+| Personal Pryme | `personal.prime` | `PersonalPryme@2026!` | Pryme | Consultar alunos e criar/publicar treinos da Pryme; sem alterar alunos ou planos |
+| Personal Move | `personal.move` | `PersonalMove@2026!` | Move | Consultar alunos e criar/publicar treinos da Move; sem alterar alunos ou planos |
+| Aluno — Gabriel Souza | `gabriel.souza@example.com` | `Gabriel@2026!` | Pryme | Próprios dados e treinos no app; sem acesso ao painel |
+| Aluna — Larissa Mendes | `larissa.mendes@example.com` | `Larissa@2026!` | Pryme | Próprios dados e treinos no app; sem acesso ao painel |
+| Aluno — Thiago Rocha | `thiago.rocha@example.com` | `Thiago@2026!` | Move | Próprios dados e treinos no app; sem acesso ao painel |
+| Aluna — Beatriz Nunes | `beatriz.nunes@example.com` | `Beatriz@2026!` | Move | Próprios dados e treinos no app; sem acesso ao painel |
+
+As senhas dos alunos correspondem aos dados de demonstração do SQL. As senhas dos administradores e personais são sugestões para teste local: documentá-las aqui não altera o banco. Para aplicá-las, configure o `.env` e execute os seeders conforme abaixo. O PersonalSeeder não troca a senha de personais já cadastrados; nesses casos, a senha existente permanece válida.
 
 Novos alunos cadastrados no web recebem uma senha inicial de pelo menos 8 caracteres; editar a matrícula preserva a senha existente. E-mails duplicados são recusados.
 
@@ -27,11 +29,11 @@ Novos alunos cadastrados no web recebem uma senha inicial de pelo menos 8 caract
 3. No `.env` local, defina as senhas das contas a criar:
 
 ```dotenv
-ADMIN_PASSWORD="defina-uma-senha-local"
-ADMIN_PRIME_PASSWORD="defina-uma-senha-local"
-ADMIN_MOVE_PASSWORD="defina-uma-senha-local"
-PERSONAL_PRIME_PASSWORD="defina-uma-senha-local"
-PERSONAL_MOVE_PASSWORD="defina-uma-senha-local"
+ADMIN_PASSWORD="AdminGeral@2026!"
+ADMIN_PRIME_PASSWORD="AdminPryme@2026!"
+ADMIN_MOVE_PASSWORD="AdminMove@2026!"
+PERSONAL_PRIME_PASSWORD="PersonalPryme@2026!"
+PERSONAL_MOVE_PASSWORD="PersonalMove@2026!"
 ```
 
 4. Execute `php artisan db:seed --class=AdminSeeder` e `php artisan db:seed --class=PersonalSeeder`. O AdminSeeder atualiza os administradores; o PersonalSeeder preserva contas existentes. Não envie o `.env` ao GitHub.
